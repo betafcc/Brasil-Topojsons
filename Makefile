@@ -8,10 +8,19 @@ TEMP_DIR := temp
 RAW_MAP_FILES := $(foreach ext,shp cpg dbf prj shx,$(TEMP_DIR)/lim_municipio_a.$(ext))
 RAW_MAP_FILES_ZIP := $(TEMP_DIR)/Limites_v2017.zip
 
+TOPO_FILES_NAMES := regioes ufs regioes_intermediarias regioes_imediatas municipios
+TOPO_FILES := $(foreach r,$(TOPO_FILES_NAMES),$(r).topo.json)
+TOPO_FILES_MIN := $(foreach r,$(TOPO_FILES),$(MIN_FOLDER)/$(r))
+
+
+.PHONY: all
+
+all: tabelas maps
+
 
 .PHONY: maps
 
-maps: municipios.topo.json ufs.topo.json $(MIN_FOLDER)/regioes.topo.json
+maps: $(TOPO_FILES) $(TOPO_FILES_MIN)
 
 municipios.topo.json: $(filter %.shp,$(RAW_MAP_FILES)) $(filter %.csv,$(TABELAS))
 	mapshaper -i $< snap \
@@ -28,10 +37,28 @@ municipios.topo.json: $(filter %.shp,$(RAW_MAP_FILES)) $(filter %.csv,$(TABELAS)
 # 	-simplify 1% -filter-islands remove-empty min-area=1e8 \
 # 	-o force format=topojson id-field=geocodigo $@
 
+regioes_imediatas.topo.json: municipios.topo.json
+	mapshaper -i $< \
+		-dissolve2 codigo_regiao_imediata copy-fields=codigo_regiao,sigla_regiao,nome_regiao,codigo_uf,sigla_uf,nome_uf,codigo_regiao_intermediaria,nome_regiao_intermediaria,codigo_regiao_imediata,nome_regiao_imediata \
+		-o force id-field=codigo_regiao_imediata $@
+
+regioes_intermediarias.topo.json: municipios.topo.json
+	mapshaper -i $< \
+		-dissolve2 codigo_regiao_intermediaria copy-fields=codigo_regiao,sigla_regiao,nome_regiao,codigo_uf,sigla_uf,nome_uf,codigo_regiao_intermediaria,nome_regiao_intermediaria \
+		-o force id-field=codigo_regiao_intermediaria $@
+
 ufs.topo.json: municipios.topo.json
 	mapshaper -i $< \
 		-dissolve2 codigo_uf copy-fields=codigo_regiao,sigla_regiao,nome_regiao,codigo_uf,sigla_uf,nome_uf \
 		-o force id-field=codigo_uf $@
+
+regioes.topo.json: municipios.topo.json
+	mapshaper -i $< \
+		-dissolve2 codigo_regiao copy-fields=codigo_regiao,sigla_regiao,nome_regiao \
+		-o force id-field=codigo_regiao $@
+
+$(TOPO_FILES_MIN): $(MIN_FOLDER)/%: %
+	mapshaper -i $< -filter-fields FID -o force $@
 
 
 .SECONDARY: $(RAW_MAP_FILES) .raw-map-files-sentinel $(RAW_MAP_FILES_ZIP)
@@ -73,4 +100,4 @@ lab:
 
 
 clean:
-	$(RM) $(TABELAS) $(TABELAS_MIN)
+	$(RM) $(TABELAS) $(TABELAS_MIN) $(TOPO_FILES)
