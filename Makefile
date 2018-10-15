@@ -1,7 +1,8 @@
 NAMES := regioes ufs regioes_intermediarias regioes_imediatas municipios
 EXTENSIONS := csv json xlsx
+MIN_FOLDER := min
 TABELAS := $(foreach ext,$(EXTENSIONS),municipios.$(ext))
-TABELAS_MIN := $(foreach ext,$(EXTENSIONS),$(foreach name,$(NAMES),min/$(name).$(ext)))
+TABELAS_MIN := $(foreach ext,$(EXTENSIONS),$(foreach name,$(NAMES),$(MIN_FOLDER)/$(name).$(ext)))
 
 TEMP_DIR := temp
 RAW_MAP_FILES := $(foreach ext,shp cpg dbf prj shx,$(TEMP_DIR)/lim_municipio_a.$(ext))
@@ -10,23 +11,27 @@ RAW_MAP_FILES_ZIP := $(TEMP_DIR)/Limites_v2017.zip
 
 .PHONY: maps
 
-maps: municipios.topo.json
+maps: municipios.topo.json ufs.topo.json $(MIN_FOLDER)/regioes.topo.json
 
 municipios.topo.json: $(filter %.shp,$(RAW_MAP_FILES)) $(filter %.csv,$(TABELAS))
 	mapshaper -i $< snap \
 		-rename-layers municipios \
 		-rename-fields codigo_municipio=geocodigo \
 		-filter-fields codigo_municipio \
-		-simplify 1% -filter-islands min-area=1e8 \
+		-simplify visvalingam 4% -filter-islands min-area=1e8 \
 		-join $(word 2,$^) keys=codigo_municipio,codigo_municipio \
 		-o force format=topojson id-field=codigo_municipio $@
-
 ## Note: remove-empty will cause problemns when joining a table that expect all features
 ## Better to leave it there even empty
 # mapshaper -i $< snap \
 # 	-rename-layers municipios \
 # 	-simplify 1% -filter-islands remove-empty min-area=1e8 \
 # 	-o force format=topojson id-field=geocodigo $@
+
+ufs.topo.json: municipios.topo.json
+	mapshaper -i $< \
+		-dissolve2 codigo_uf copy-fields=codigo_regiao,sigla_regiao,nome_regiao,codigo_uf,sigla_uf,nome_uf \
+		-o force id-field=codigo_uf $@
 
 
 .SECONDARY: $(RAW_MAP_FILES) .raw-map-files-sentinel $(RAW_MAP_FILES_ZIP)
