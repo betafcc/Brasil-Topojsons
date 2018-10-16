@@ -1,6 +1,3 @@
-*.csv
-*.xlsx
-*.json
 temp/
 
 # Byte-compiled / optimized / DLL files
